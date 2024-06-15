@@ -1,0 +1,71 @@
+const User = require('../models/users-model')
+
+const client = require('../utils/reddisClient');
+
+const confEnv = require('../config/default')
+
+const jwt = require('jsonwebtoken')
+
+let codePc = [] ;
+
+// generate otp
+const otp = () => {
+  return Math.floor(Math.random()*(9999 - 1000 + 1))+2000
+}
+ 
+// get and send otp
+const getNumber = async (req,res,next)=>{
+    const { phone } = req.body
+
+    if (!phone) {
+        return res.status(400).send('phonenumber is required');
+    }
+
+    // exists user
+    const validUser = await client.EXISTS('phone')
+    
+    // check user
+    if(validUser===1){
+      return res.status(400).send('User already exists');
+    } 
+    else {
+      client.set('phone',phone,{EX:60*2*1}, (err) => {
+        if (err) {
+          return res.status(500).send(err);
+        }
+      })
+      // return res.status(201).send(`<h2>User registered successfully ; opt code : ${otp()}</h2>`);
+    };
+    // create otp
+    const coded = otp()
+
+    codePc.push(coded)
+
+    console.log(codePc)
+
+    res.redirect(`/users/code?phone=${phone}`);
+}
+
+const postCode = async (req,res,next)=>{
+  const { code } = req.body
+
+  const validUser = await client.get('phone')
+
+  if(+code == codePc[0]){
+
+    const user = new User({ phonenumber:validUser })
+
+    jwt.sign({ validUser }, confEnv.jwtKey)
+
+    await user.save()
+
+    res.status(201).send('log in')
+  } 
+  else{
+    res.status(401).send('incorect')
+  }
+}
+
+exports.getNumber= getNumber
+exports.postCode = postCode
+
